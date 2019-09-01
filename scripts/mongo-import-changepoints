@@ -1,0 +1,5 @@
+#!/bin/sh
+
+COLLECTION=${COLLECTION:-monitor_highlights}
+
+mongoimport --ssl --host mongo.intensix.com -u develop -p `cat ~/.mongo-password` --authenticationDatabase admin --db Sandbox --collection $COLLECTION --type csv --headerline --columnsHaveTypes  --file $@

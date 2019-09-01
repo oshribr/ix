@@ -1,0 +1,3 @@
+#!/bin/sh
+
+mongo --ssl mongo.intensix.com -u develop -p `cat ~/.mongo-password` --authenticationDatabase admin $@

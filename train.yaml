@@ -1,0 +1,19 @@
+# Monitor training configuration
+
+# Multi-layer RNN (GRU based) with dropout
+rnn: &rnn
+    hidden_size: 128
+    nlayers: 3  # number of stacked GRU layers
+    p: 0.5      # dropout probability, named as in PyTorch
+
+# Gaussianizing RNN
+# adds conditional adversarial autoencoder to each input
+grnn:
+    <<: *rnn
+    encoder_sizes: [64, 64, 32, 16]
+    discriminator_sizes: [16, 32, 16]
+
+# Alert filter
+alert:
+    hidden_size: 128  # should match the prediction model
+    p: 0.5

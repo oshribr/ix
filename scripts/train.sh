@@ -1,0 +1,11 @@
+#!/bin/sh
+
+RATE=${RATE:-0.001}
+NEPOCHS=${NEPOCHS:-1000}
+BATCH_SIZE=${BATCH_SIZE:-128}
+ARCH=${ARCH:-rnn}
+DEPTH=${DEPTH:-5}
+DATA=${DATA:-ALL}
+MODEL=${MODEL:-$DATA-$DEPTH.model}
+
+train -r $RATE -n $NEPOCHS -b $BATCH_SIZE -a $ARCH -d $DEPTH $MODEL data/$DATA/array
