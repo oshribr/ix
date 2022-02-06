@@ -93,7 +93,8 @@ def get_args(args=sys.argv[1:]):
 
     args = parser.parse_args(args)
     args.cuda = not args.no_cuda and torch.cuda.is_available()
-
+    args.device = torch.device("cuda") if args.cuda else torch.device("cpu")
+    print(f"args.device: {args.device}")
     return args
 
 
@@ -102,7 +103,7 @@ def read_config(fname, overrides):
     Components in compound keys are concatenated by "/".
     """
     with open(fname, "r") as f:
-        config = yaml.load(f)
+        config = yaml.full_load(f)
 
     # Apply config overrides
     for kv in overrides:
@@ -242,9 +243,7 @@ def main():
 
     # Load the model
     model, model_parameters = load_model(args, cfg, data.size(2))
-    print(yaml.dump(model_parameters), file=sys.stderr)
-    if args.cuda:
-        model.cuda()
+    model.to(args.device)
 
     # Split into train, validation, and test
     train_data, validation_data, test_data = split_data(data, args)
@@ -276,29 +275,30 @@ def main():
     last_iepoch_saved = numpy.nan  # last epoch the model was saved
     while True:
         # Validate and test the model
-        model.eval()
-        loss = [0., 0.]
-        for i, loader in enumerate([validation_loader, test_loader]):
-            std = 0.
-            for batch in loader:
-                if args.cuda:
-                    batch = batch.cuda()
-                x, y = makexy(model, batch, args.depth)
+        with torch.no_grad():
+            model.eval()
+            loss = [0., 0.]
+            for i, loader in enumerate([validation_loader, test_loader]):
+                std = 0.
+                for batch in loader:
+                    batch = batch.to(args.device)
+                    x, y = makexy(model, batch, args.depth)
 
-                # forward
-                result = model(x, args.depth)
-                preds = result[0]
-                std += preds.data[:, :, :, model.input_size:].abs() \
-                    .mean(0) \
-                    .mean(0) \
-                    * len(batch)
+                    # forward
+                    result = model(x, args.depth)
+                    preds = result[0]
+                    std += preds.data[:, :, :, model.input_size:].abs() \
+                        .mean(0) \
+                        .mean(0) \
+                        * len(batch)
 
-                # loss
-                batch_loss = model.loss(result, x, y)
-                loss[i] += batch_loss.data[0] * len(batch)
+                    # loss
+                    batch_loss = model.loss(result, x, y)
+                    loss[i] += batch_loss.data * len(batch)
 
-            loss[i] /= len(loader.dataset)
-            std /= len(loader.dataset)
+                loss[i] /= len(loader.dataset)
+                std /= len(loader.dataset)
+
         validation_loss, test_loss = loss
 
         print("epoch {:4d}: train loss: {:.6g} "
@@ -340,8 +340,8 @@ def main():
             if numpy.random.random() > args.train_fraction:
                 continue
 
-            if args.cuda:
-                batch = batch.cuda()
+            batch = batch.to(args.device)
+
             x, y = makexy(model, batch, args.depth)
 
             # forward
@@ -350,14 +350,14 @@ def main():
 
             # loss
             batch_loss = model.loss(result, x, y)
-            train_loss += batch_loss.data[0] * len(batch)
+            train_loss += batch_loss.data * len(batch)
 
             # backward
             batch_loss.backward()
             optimizer.step()
 
             print("batch {:4d}: train loss: {:.6g}"
-                  .format(ibatch, batch_loss.data[0]))
+                  .format(ibatch, batch_loss.data))
             sys.stdout.flush()  # to see the progress when redirected
 
             ibatch += 1
