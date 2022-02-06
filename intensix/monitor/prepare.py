@@ -83,7 +83,7 @@ def concatenate_stays(data, names, columns, length):
     for name in names:
         with open(os.path.join(data, name), "rb") as f:
             df = pickle.load(f)
-        stay = df.as_matrix(columns)
+        stay = df[columns].to_numpy()
         stay = stay[:stay.shape[0] // length * length, :]
         stays.append(stay)
     return numpy.concatenate(stays, axis=0)

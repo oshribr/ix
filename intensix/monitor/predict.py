@@ -64,8 +64,8 @@ def compute_predictions(model, obs, depth):
 
     # Extract the input
     x, y = model.makexy(obs, depth)
-    x = Variable(x, volatile=True)
-    y = Variable(y, volatile=True)
+    x = Variable(x)
+    y = Variable(y)
 
     # Run the model forward through the input
     preds = model(x, depth, missing=True)[0]
@@ -147,14 +147,15 @@ def main():
         stay = pickle.load(f)
 
     # Extract the time series, including missing data
-    obs = stay[columns].as_matrix()
+    obs = stay[columns].to_numpy()
 
     # Normalize the time series
     nobs = (obs - scale[0])/scale[1]
 
     # Compute predictions for all data points
     # Reshape the matrix as a batch
-    npreds, nlls = compute_predictions(model, nobs, args.delay)
+    with torch.no_grad():
+        npreds, nlls = compute_predictions(model, nobs, args.delay)
     print("stay: {}\tavg std: {:0=.6f}\tavg NLL: {: .6g}"
           .format(args.stay,
                   numpy.abs(npreds[:, npreds.shape[1] // 2:]).mean(),

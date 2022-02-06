@@ -128,7 +128,7 @@ def main():
         stay = pickle.load(f)
 
     # Extract the time series, including missing data
-    observations = stay[columns].as_matrix()
+    observations = stay[columns].to_numpy()
 
     # Normalize the time series
     observations = (observations - scale[0])/scale[1]
