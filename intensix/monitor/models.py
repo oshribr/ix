@@ -126,20 +126,55 @@ class P(nn.Module):
         """Fills missing observations in xt with predictions
         from xo. Returns updated xt.
         """
-        # PyTorch does not provide isnan, need to fall back to
-        # numpy here; alternatively, nans should be replaced
-        # in the data with a reserved value
 
         # compute nan indices for means
-        nans = numpy.isnan(xt.data.numpy()[:, :self.input_size])
-        if numpy.any(nans):
-            nans = torch.from_numpy(nans.astype(int)).byte()
+        nans = torch.isnan(xt[:, :self.input_size])
+        if torch.any(nans):
             # extend the index array to stds
             nans = Variable(torch.cat([nans, nans], dim=1))
 
             # make an updated copy of xt
             xt = xt.clone()
             xt.masked_scatter_(nans, xo.masked_select(nans))
+        return xt
+
+    def fill_missing_mean(self, xt, xo):
+        """Fills missing observations in xt with predictions
+        from xo and init the std with 0. Returns updated xt.
+        """
+
+        # compute nan indices for means
+        nans = torch.isnan(xt[:, :self.input_size])
+        if torch.any(nans):
+            # extend the index array to stds
+            nans = Variable(torch.cat([nans, nans], dim=1))
+
+            # make an updated copy of xt
+            xt = xt.clone()
+            xt.masked_scatter_(nans, xo.masked_select(nans))
+            xt[:, self.input_size:] = 0
+
+        return xt
+
+    def fill_missing_sampling(self, xt, xo):
+        """Fills missing observations in xt with predictions
+        from sampling xo with normal distribution and init the std with 0.
+        Returns updated xt.
+        """
+
+        # compute nan indices for means
+        nans = torch.isnan(xt[:, :self.input_size])
+        if torch.any(nans):
+
+            # extend the index array to stds
+            nans = Variable(torch.cat([nans, nans], dim=1))
+            mean = torch.normal(xo[:,:self.input_size],xo[:,self.input_size:])
+            std = torch.zeros(mean.shape)
+            xo = Variable(torch.cat([mean,std],dim=1))
+            # make an updated copy of xt
+            xt = xt.clone()
+            xt.masked_scatter_(nans, xo.masked_select(nans))
+
         return xt
 
 

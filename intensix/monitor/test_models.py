@@ -79,6 +79,44 @@ def test_fill_missing():
     assert xf[1, 1] == 3. and xf[1, 3] == 9, "nan replaced"
     assert xf[0, 1] == 1. and xf[0, 2] == 0, "rest stays intact"
 
+def test_fill_missing_mean():
+    """Tests that missing values by mean are filled correctly.
+    """
+    # observations with missing (1, 1)
+    xi = Variable(torch.Tensor(2, 4))
+    xi[:, :2] = 1.
+    xi[:, 2:] = 0.
+    xi[1, 1] = numpy.nan
+
+    # predictions
+    xo = xi.clone()
+    xo[:, :2] = 3.
+    xo[:, 2:] = 9.
+
+    xf = P(2).fill_missing_mean(xi, xo).data
+    assert xf[1, 1] == 3. and xf[1, 3] == 0, "nan replaced"
+    assert xf[0, 1] == 1. and xf[0, 2] == 0, "rest stays intact"
+
+def test_fill_missing_sampling():
+    """Tests that missing values by mean are filled correctly.
+    """
+    # observations with missing (1, 1)
+    xi = Variable(torch.Tensor(2, 4))
+    xi[:, :2] = 1.
+    xi[:, 2:] = 0.
+    xi[1, 1] = numpy.nan
+
+    # predictions
+    xo = xi.clone()
+    xo[:, :2] = 3.
+    xo[:, 2:] = 9.
+
+    torch.manual_seed(0)
+    xf = P(2).fill_missing_sampling(xi, xo).data
+
+    assert abs(xf[1, 1] - 8.1159) < 1e-04 and xf[1, 3] == 0, "nan replaced"
+    assert xf[0, 1] == 1. and xf[0, 2] == 0, "rest stays intact"
+
 
 def test_P_RNN(batch):
     """Tests that the forward propagation of P_RNN
