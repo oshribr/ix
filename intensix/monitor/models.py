@@ -8,7 +8,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-
 def make(arch, input_size, **args):
     """Creates a model object based on the model architecture,
     as appears in the configuration file. Facilitates creation
@@ -44,6 +43,7 @@ class P(nn.Module):
           batch -- data batch.
           depth -- prediction depth.
         """
+
         # depth can be 0
         means = batch[:batch.size(0) - depth]
         stds = means.clone()
@@ -168,7 +168,8 @@ class P(nn.Module):
 
             # extend the index array to stds
             nans = Variable(torch.cat([nans, nans], dim=1))
-            mean = torch.normal(xo[:,:self.input_size],xo[:,self.input_size:])
+            mean = torch.normal(xo[:, :self.input_size],
+                                torch.abs(xo[:, self.input_size:]))
             std = torch.zeros(mean.shape)
             xo = Variable(torch.cat([mean,std],dim=1))
             # make an updated copy of xt
@@ -232,13 +233,22 @@ class P_RNN(P):
           depth -- prediction depth,
           xo -- current predictions,
           h  -- the hidden state,
-          missing -- if True, fill missing values.
+          missing -- if not nan, replaces missing observations
+                     with predictions. the allow strategy are 
+                     "distribution", "mean", "sampling"
         Returns next prediction, hidden state, future
         predictions up to depth.
         """
-        if missing:
-            # fill missing observations from predictions
+        # fill missing observations from predictions
+        if missing == "distribution":
             xt = self.fill_missing(xt, xo)
+        elif missing == "mean":
+            xt = self.fill_missing_mean(xt, xo)
+        elif missing == "sampling":
+            xt = self.fill_missing_sampling(xt, xo)
+        elif missing != "nan":
+            raise ValueError("missing args must be one of "
+                             f"distribution, mean, sampling not {missing}")
         # Update the real state
         h = self.rnncell(xt, h)
         # Generate predictions of depth future time steps
@@ -257,7 +267,7 @@ class P_RNN(P):
         xos = torch.stack(xos, 1)
         return xo, h, xos
 
-    def forward(self, x, depth, xo=None, h=None, missing=False):
+    def forward(self, x, depth, xo=None, h=None, missing="nan"):
         """Performs the forward pass over the network.
         Arguments:
           x -- the observations.
@@ -266,11 +276,12 @@ class P_RNN(P):
                 prior unless provided.
           h --  the initial hidden stat; initialized to zeroes
                 unless provided.
-          missing -- if True, replaces missing observations
-                     with predictions.
+          missing -- if not nan, replaces missing observations
+                     with predictions. the allow strategy are 
+                     "distribution", "mean", "sampling"
         Returns predicted outputs and the last hidden state.
         """
-        if missing and xo is None:
+        if missing != "nan" and xo is None:
             xo = self.initial_xo(x)
         if h is None:
             h = self.initial_h(x)

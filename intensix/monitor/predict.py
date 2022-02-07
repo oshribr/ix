@@ -21,7 +21,7 @@ from . import __version__
 
 DELAY = 1
 INFIX = "predict"
-
+MISSING = "distribution"
 
 def get_args(args=sys.argv[1:]):
     """Parse command line arguments.
@@ -36,6 +36,9 @@ def get_args(args=sys.argv[1:]):
                         help="output file, "
                         "<input name>-<infix>.<input extension> "
                         "by default")
+    parser.add_argument("-r", "--dictionary", type=str, default=None,
+                        help="output file directory, "
+                        "stay file directory by default")
     parser.add_argument("-q", "--quiet", action="store_true", default=False,
                         help="print less on the console")
     parser.add_argument("-x", "--infix", type=str, default=INFIX,
@@ -44,6 +47,10 @@ def get_args(args=sys.argv[1:]):
     parser.add_argument("-d", "--delay", type=int, default=DELAY,
                         help="prediction delay, {} by default"
                         .format(DELAY))
+    parser.add_argument("-m", "--missing", type=str, default=MISSING,
+                        choices=["distribution", "mean", "sampling"],
+                        help="fill missing points strategy, {} by default"
+                        .format(MISSING))
     parser.add_argument("model", help="model file")
     parser.add_argument("data",
                         help="data folder, must contain "
@@ -54,7 +61,7 @@ def get_args(args=sys.argv[1:]):
     return args
 
 
-def compute_predictions(model, obs, depth):
+def compute_predictions(model, obs, depth, missing):
     """Computes predictions based on the observations.
     Returns the predictions and their nlls.
     """
@@ -68,7 +75,7 @@ def compute_predictions(model, obs, depth):
     y = Variable(y)
 
     # Run the model forward through the input
-    preds = model(x, depth, missing=True)[0]
+    preds = model(x, depth, missing=missing)[0]
 
     # compute LML
     nlls = model.pred_nlls(preds, y)
@@ -155,7 +162,8 @@ def main():
     # Compute predictions for all data points
     # Reshape the matrix as a batch
     with torch.no_grad():
-        npreds, nlls = compute_predictions(model, nobs, args.delay)
+        npreds, nlls = compute_predictions(model, nobs, args.delay,
+                                           args.missing)
     print("stay: {}\tavg std: {:0=.6f}\tavg NLL: {: .6g}"
           .format(args.stay,
                   numpy.abs(npreds[:, npreds.shape[1] // 2:]).mean(),
@@ -190,5 +198,8 @@ def main():
     if args.output is None:
         name, ext = os.path.splitext(args.stay)
         args.output = name + "-" + args.infix + ext
+    if args.dictionary is not None:
+        _, name = os.path.split(args.output)
+        args.output = os.path.join(args.dictionary, name)
     with open(args.output, "wb") as f:
         pickle.dump(stay, f)
