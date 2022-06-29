@@ -227,7 +227,7 @@ class P_RNN(P):
 
         return hnext
 
-    def step(self, xt, depth, xo, h, missing):
+    def od(self, xt, depth, xo, h, missing):
         """Performs a single step through RNN. Arguments:
           xt -- the step input,
           depth -- prediction depth,
@@ -398,7 +398,7 @@ class P_GRNN(P_RNN):
 
         return xr
 
-    def forward(self, x, depth, xo=None, h=None, missing=False):
+    def forward(self, x, depth, xo=None, h=None, missing='nan'):
         """Performs the forward pass over the network. Arguments:
           x -- the observations.
           depth -- prediction depth.
@@ -406,8 +406,9 @@ class P_GRNN(P_RNN):
                 prior unless provided.
           h --  the initial hidden stat; initialized to zeroes
                 unless provided.
-          missing -- if True, replaces missing observations
-                     with predictions.
+         missing -- if not nan, replaces missing observations
+                     with predictions. the allow strategy are 
+                     "distribution", "mean", "sampling"
         """
         if xo is None:
             xo = self.initial_xo(x)
@@ -419,7 +420,7 @@ class P_GRNN(P_RNN):
         encoded = []  # encoded and normalized input
         for t in range(x.size(0)):
             xt = x[t]
-            xe = self.encode(xt, xo, missing)
+            xe = self.encode(xt, xo, missing != 'nan')
 
             # Accumulate encoded input to compute the loss
             encoded.append(xe)

@@ -36,9 +36,6 @@ def get_args(args=sys.argv[1:]):
                         help="output file, "
                         "<input name>-<infix>.<input extension> "
                         "by default")
-    parser.add_argument("-r", "--dictionary", type=str, default=None,
-                        help="output file directory, "
-                        "stay file directory by default")
     parser.add_argument("-q", "--quiet", action="store_true", default=False,
                         help="print less on the console")
     parser.add_argument("-x", "--infix", type=str, default=INFIX,
@@ -60,6 +57,25 @@ def get_args(args=sys.argv[1:]):
 
     return args
 
+def add_nans(obs, fraction):
+    """Add nans to the observations data base of the fraction.
+    exmple: 
+        obs =  [[ 0.,  1.,  2.],
+                [ 3.,  4.,  5.],
+                [ 6.,  7.,  8.],
+                [ 9., 10., 11.]]
+        fraction = 0.5 [False,  True,  True, False]
+
+    return: 
+        [[ 0.,  1.,  2.],
+         [nan, nan, nan],
+         [nan, nan, nan],
+         [ 9., 10., 11.]]
+    """
+    nans = numpy.random.rand(obs.shape[0]) < fraction
+    obs[nans, :] = numpy.nan
+    return obs
+
 
 def compute_predictions(model, obs, depth, missing):
     """Computes predictions based on the observations.
@@ -76,7 +92,6 @@ def compute_predictions(model, obs, depth, missing):
 
     # Run the model forward through the input
     preds = model(x, depth, missing=missing)[0]
-
     # compute LML
     nlls = model.pred_nlls(preds, y)
 
@@ -149,57 +164,64 @@ def main():
         "but data has {}" \
         .format(params["input_size"], len(columns))
 
-    # Load the stay data frame
-    with open(args.stay, "rb") as f:
-        stay = pickle.load(f)
+    if args.stay == '-':
+        args.stay = sys.stdin
+    else:
+        args.stay = [args.stay+" "]
 
-    # Extract the time series, including missing data
-    obs = stay[columns].to_numpy()
+    print(args.infix)
+    for stay_ in args.stay:
+        stay_ = stay_[:-1]
+        # Load the stay data frame
+        with open(stay_, "rb") as f:
+            stay = pickle.load(f)
 
-    # Normalize the time series
-    nobs = (obs - scale[0])/scale[1]
+        # Extract the time series, including missing data
+        obs = stay[columns].to_numpy()
 
-    # Compute predictions for all data points
-    # Reshape the matrix as a batch
-    with torch.no_grad():
-        npreds, nlls = compute_predictions(model, nobs, args.delay,
-                                           args.missing)
-    print("stay: {}\tavg std: {:0=.6f}\tavg NLL: {: .6g}"
-          .format(args.stay,
-                  numpy.abs(npreds[:, npreds.shape[1] // 2:]).mean(),
-                  nlls[numpy.logical_not(numpy.isnan(nlls))]
-                  .mean()))
-    sys.stdout.flush()
+        # Normalize the time series
+        nobs = (obs - scale[0])/scale[1]
 
-    # Rearrange predictions so that predictions in the same row
-    # are for the same time step but from different past points
-    # of view, same for NLLs
-    npreds = sync_preds(npreds, args.delay)
-    nlls = sync_nlls(nlls, args.delay)
+        # Compute predictions for all data points
+        # Reshape the matrix as a batch
+        with torch.no_grad():
+            npreds, nlls = compute_predictions(model, nobs, args.delay,
+                                            args.missing)
+        print("stay: {}\tavg std: {:0=.6f}\tavg NLL: {: .6g}"
+            .format(stay_,
+                    numpy.abs(npreds[:, npreds.shape[1] // 2:]).mean(),
+                    nlls[numpy.logical_not(numpy.isnan(nlls))]
+                    .mean()))
+        sys.stdout.flush()
 
-    # Scale predictions into original, unnormalized space
-    preds = numpy.concatenate(
-        (npreds[:, :npreds.shape[1] // 2]*scale[1] + scale[0],
-         numpy.abs(npreds[:, npreds.shape[1] // 2:])*scale[1]),
-        axis=1)
+        # Rearrange predictions so that predictions in the same row
+        # are for the same time step but from different past points
+        # of view, same for NLLs
+        npreds = sync_preds(npreds, args.delay)
+        nlls = sync_nlls(nlls, args.delay)
+        print(f'shape: {npreds}')
+        # Scale predictions into original, unnormalized space
+        preds = numpy.concatenate(
+            (npreds[:, :npreds.shape[1] // 2]*scale[1] + scale[0],
+            numpy.abs(npreds[:, npreds.shape[1] // 2:])*scale[1]),
+            axis=1)
 
-    # Merge predictions into the data frame
-    for icol, colname in enumerate(columns):
-        for j in range(preds.shape[1]):
-            stay = stay.assign(
-                **{"{}_mean".format(colname):
-                   preds[:, icol],
-                   "{}_std".format(colname):
-                   preds[:, preds.shape[1] // 2 + icol],
-                   "{}_nll".format(colname):
-                   nlls[:, icol]})
+        # Merge predictions into the data frame
+        for icol, colname in enumerate(columns):
+            for j in range(preds.shape[1]):
+                stay = stay.assign(
+                    **{"{}_mean".format(colname):
+                    preds[:, icol],
+                    "{}_std".format(colname):
+                    preds[:, preds.shape[1] // 2 + icol],
+                    "{}_nll".format(colname):
+                    nlls[:, icol]})
+                
+        # Store the extended dataframe
+        output = args.output
+        if output is None:
+            name, ext = os.path.splitext(stay_)
+            output = name + "-" + args.infix + ext
+        with open(output, "wb") as f:
+            pickle.dump(stay, f)
 
-    # Store the extended dataframe
-    if args.output is None:
-        name, ext = os.path.splitext(args.stay)
-        args.output = name + "-" + args.infix + ext
-    if args.dictionary is not None:
-        _, name = os.path.split(args.output)
-        args.output = os.path.join(args.dictionary, name)
-    with open(args.output, "wb") as f:
-        pickle.dump(stay, f)

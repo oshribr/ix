@@ -13,7 +13,7 @@ import torch.optim
 from torch.autograd import Variable
 from . import models
 from . import __version__
-
+import pickle
 # Default argument values
 CONFIG = "train.yaml"
 DEPTH = 2      # minimum depth for which the training works
@@ -273,6 +273,7 @@ def main():
     # Train/test loop
     iepoch = 0
     last_iepoch_saved = numpy.nan  # last epoch the model was saved
+    train_lossess, validation_lossess, test_lossess = [], [], []
     while True:
         # Validate and test the model
         with torch.no_grad():
@@ -308,7 +309,14 @@ def main():
                       validation_loss, test_loss,
                       std.mean(), std))
         sys.stdout.flush()
+        train_lossess.append(float(train_loss))
+        validation_lossess.append(float(validation_loss))
+        test_lossess.append(float(test_loss))
 
+        losses, _ = os.path.splitext(args.model)
+        losses = losses + '-losses.list'
+        with open(losses, 'wb') as w:
+            pickle.dump([train_lossess, validation_lossess, test_lossess], w)
         # Save the model
         if iepoch >= args.burnin and validation_loss <= last_validation_loss:
             if os.path.exists(args.model):
